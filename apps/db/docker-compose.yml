@@ -1,0 +1,28 @@
+version: "3.3"
+
+services:
+  postgres:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: <CHANGE TO DOCKER SECRETS>
+
+  adminer:
+    image: adminer
+    restart: always
+    networks:
+      - traefik-global-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.adminer.loadbalancer.server.port=8080"
+      - "traefik.http.routers.adminer.rule=Host(`admin.<domain>.com`) && Path(`/adminer`)"
+      - "traefik.http.routers.adminer.entrypoints=websecure"
+      - "traefik.http.routers.adminer.service=adminer"
+      - "traefik.http.routers.adminer.tls.certresolver=leresolver"
+
+networks:
+  default:
+    external:
+      name: core_bridge
+  traefik-global-proxy:
+    external: true

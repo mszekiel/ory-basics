@@ -1,0 +1,71 @@
+version: "3.3"
+
+services:
+  traefik:
+    image: "traefik:latest"
+    restart: always
+    networks:
+      - traefik-global-proxy
+      - backend
+    command:
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --providers.docker
+      - --log.level=ERROR
+      - --certificatesresolvers.leresolver.acme.httpchallenge=true
+      - --certificatesresolvers.leresolver.acme.email=<email>
+      - --certificatesresolvers.leresolver.acme.storage=./letsencrypt/acme.json
+      - --certificatesresolvers.leresolver.acme.httpchallenge.entrypoint=web
+      - --api.dashboard
+      - --metrics.prometheus=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "letsencrypt:/letsencrypt/"
+      - "./traefik_data:/traefik_data/"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.<domain>.com`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=<CHANGE TO DOCKER SECRETS>"
+      - "traefik.http.routers.dashboard.tls.certresolver=leresolver"
+      - "traefik.docker.network=traefik-global-proxy"
+
+  portainer:
+    image: portainer/portainer-ce
+    command: -H unix:///var/run/docker.sock
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - traefik-global-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.portainer-dashboard.loadbalancer.server.port=9000"
+      - "traefik.http.routers.portainer-dashboard.rule=Host(`portainer.<domain>.com`)"
+      - "traefik.http.routers.portainer-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.portainer-dashboard.service=portainer-dashboard"
+      - "traefik.http.routers.portainer-dashboard.tls.certresolver=leresolver"
+
+      - "traefik.http.services.portainer-edge.loadbalancer.server.port=8000"
+      - "traefik.http.routers.portainer-edge.rule=Host(`edge.<domain>.com`)"
+      - "traefik.http.routers.portainer-edge.entrypoints=websecure"
+      - "traefik.http.routers.portainer-edge.service=portainer-edge"
+      - "traefik.http.routers.portainer-edge.tls.certresolver=leresolver"
+
+volumes:
+  portainer_data:
+  letsencrypt:
+
+networks:
+  traefik-global-proxy:
+    external: true
+  backend:
